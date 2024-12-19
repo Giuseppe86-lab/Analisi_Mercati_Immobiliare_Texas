@@ -8,16 +8,26 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+# 0. Load dataset
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars} 
-summary(cars)
+```{r}
+real_estate_df <- read.csv("realestate_texas.csv")
+print(head(real_estate_df,5))
+print(dim(real_estate_df))
+attach(real_estate_df)
 ```
+
+The dataset has 8 features:
+
+1. city
+2. year
+3. month
+4. sales - number of saled house per that month
+5. volume - total revenue per that month in million of dollars
+6. median_price - median price in dollars
+7. listing - total number of active listings
+8. months_inventory - amount of time required to sell all current listings
+
 
 ## Including Plots
 
