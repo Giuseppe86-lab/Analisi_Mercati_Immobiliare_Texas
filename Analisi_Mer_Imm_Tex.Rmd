@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # 0. Load dataset
 
 ```{r}
-real_estate_df <- read.csv("realestate_texas.csv")
+real_estate_df <- read.csv("realestate_texas.csv", stringsAsFactors = TRUE)
 print(head(real_estate_df,5))
 print(dim(real_estate_df))
 attach(real_estate_df)
@@ -19,22 +19,227 @@ attach(real_estate_df)
 
 The dataset has 8 features:
 
-1. city
-2. year
-3. month
-4. sales - number of saled house per that month
-5. volume - total revenue per that month in million of dollars
-6. median_price - median price in dollars
-7. listing - total number of active listings
-8. months_inventory - amount of time required to sell all current listings
+1. city (qualitativa)
+2. year (qualitativa su scala ordinale)
+3. month (qualitativa su scala ordinale)
+4. sales (quantitativa discreta)- number of saled house per that month
+5. volume (quantitativa)- total revenue per that month in million of dollars
+6. median_price (quantitativa)- median price in dollars
+7. listings (quantitativa discreta)- total number of active listings
+8. months_inventory (quantitativa continua)- amount of time required to sell all current listings
 
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure}
-plot(pressure)
+# 1. Features Analysis
+```{r}
+levels(city)
+unique(year)
+unique(month)
+```
+We have to analyze the result of four cities for four years, it is better to had a column that can combine year and month.
+```{r}
+real_estate_df$year_month <-paste(year, month, sep="_")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# 2. Indici di posizione, variabilità e forma 
+
+```{r}
+table(city)
+table(year)
+table(year, city)
+table(month)
+```
+
+Le distribuzioni di frequenze assolute ci mostrano che i dati sono perfettamente bilanciati per anno e per città, quindi avremo un totale 60 entries per ogni città, una per ogni mese dei 5 anni di analisi.
+
+
+Calcoliamo gli indici di posizione, di variabilità e di forma per le variabili: sales, volume, median_price, listing e months_inventory
+
+```{r}
+library(moments)
+# Definizione funzione per il calcolo del coefficiente di variazione
+CV <- function(x){
+  return (sd(x)/mean(x))*100
+}
+
+# Lista delle colonne da analizzare
+columns <- c("sales", "volume", "median_price", "listings", "months_inventory")
+
+# Creazione di una lista per salvare i risultati
+results <- list()
+
+# Ciclo sulle colonne
+for (col in columns) {
+  
+  data <- real_estate_df[[col]]  # Estrai la colonna
+    
+  # Calcola le statistiche base
+  stats <- round(summary(data),2)  # Ottieni Min, Q1, Mediana, Media, Q3, Max
+    
+  # Calcola ulteriori statistiche
+  iqr <- round(IQR(data),2)  # Intervallo interquartile
+  varianza <- round(var(data),2)  # Varianza
+  sd <- round(sd(data),2)  # Deviazione standard
+  cv <- round(CV(data),2)
+  skew <- round(skewness(data),2)  # Skewness
+  kurt <- round(kurtosis(data),2)-3  # Kurtosis
+    
+    # Combina tutte le statistiche in una riga
+  stats_row <- c(stats, IQR = iqr, Varianza = varianza, SD = sd, CV = cv, Skewness = skew, Kurtosis = kurt)
+    
+    # Trasponi per creare una riga per colonna e aggiungi alla lista
+  results[[col]] <- as.data.frame(t(stats_row))
+
+}
+
+# Combina i risultati in un unico data.frame
+results_table <- do.call(rbind, results)
+results_table <- cbind(Grandezza = rownames(results_table), results_table)  # Aggiungi i nomi delle colonne
+rownames(results_table) <- NULL  # Rimuovi i vecchi indici
+
+# Aggiorna i nomi delle colonne per includere le nuove statistiche
+colnames(results_table) <- c("Grandezza", "Min", "1st Qu.", "Median", "Mean", "3rd Qu.", "Max", 
+                             "IQR", "Varianza", "SD", "CV", "Skewness", "Kurtosis")
+
+# Visualizza il risultato
+print(results_table)
+
+
+```
+
+# 3. Identificazione delle variabili con maggiore variabilità e asimmetria
+
+
+Le grandezze sales. volume, listings e months_inventory mostrano tutte una asimmetria positiva in quanto la media è maggiore della mediana, mentre median_price mostra una asimmetria negativa. Le 5 quantità hanno domini di variabilità molto diversi.
+
+
+Leggendo la colonna del coefficiente di variabilità possiamo notare che **volume** è la variabile con la più alta variabilità ed è anche quella che presente un coefficiente di asimmetria più alto, è anche l'unica con una Curtosi positiva (0.18) valore che ci dice come la variabile presenti la tendenza ad avere una distribuzione più stretta rispetto a quella della distribuzione normale. Validiamo queste osservazioni anche attraverso la rappresentazione grafica con istogrammi e boxplot.
+
+
+Costruiamo gli istogrammi di queste sei grandezze:
+```{r}
+# Definizione per il calcolo del numero di bin secondo il criterio di Rice
+rice_bins <- function(data) {
+  n <- length(data) # Numero di osservazioni
+  return(2 * n^(1/3))
+}
+
+```
+
+```{r}
+library(ggplot2)
+library(patchwork) # Per disporre i grafici in una griglia
+
+# Lista per salvare i grafici
+plots <- list()
+
+# Ciclo per generare gli istogrammi
+for (col in columns) {
+  
+  data <- real_estate_df[[col]]
+  
+  # Calcola il numero di bin e il binwidth
+  bins <- rice_bins(data)
+  binwidth <- diff(range(data, na.rm = TRUE)) / bins
+  
+  # Crea l'istogramma
+  plot <- ggplot(real_estate_df) +
+    geom_histogram(aes_string(x = col),
+                   binwidth = binwidth,
+                   col = "black",
+                   fill = "lightblue") +
+    labs(title = paste("HS per", col),
+         x = col,
+         y = "Count") +
+    theme_minimal()
+  
+  # Aggiungi il grafico alla lista
+  plots[[col]] <- plot
+}
+
+# Disposizione dei grafici in una griglia 3x2
+final_plot <- (plots[[1]] | plots[[2]] | plots[[3]]) /
+              (plots[[4]] | plots[[5]])
+
+# Mostra i grafici
+print(final_plot)
+
+  
+```
+
+Costruiamo i boxplot di queste sei grandezze:
+
+```{r}
+# Lista per salvare i grafici
+plots <- list()
+
+# Ciclo per generare gli istogrammi
+for (col in columns) {
+  
+  data <- real_estate_df[[col]]
+  
+  # Crea l'istogramma
+  plot <- ggplot(real_estate_df) +
+    geom_boxplot(aes_string(y = col),
+                   col = "black",
+                   fill = "lightblue") +
+    labs(title = paste("BP per", col),
+         y = col) +
+    theme_minimal()
+  
+  # Aggiungi il grafico alla lista
+  plots[[col]] <- plot
+}
+
+# Disposizione dei grafici in una griglia 3x2
+final_plot <- (plots[[1]] | plots[[2]] | plots[[3]]) /
+              (plots[[4]] | plots[[5]])
+
+# Mostra i grafici
+print(final_plot)
+
+```
+
+Osservando i boxplot vediamo che **volume** è l'unica grandezza che presenta degli outliers, la presenza dei quali potrebbe giustificare l'asimetria registrata dal relativo coefficiente e la sua maggiore variabilità.
+
+#4. Creazione di classi per una variabile quantitativa
+
+
+Selezioniamo la variabile sales per costruire una distribuzione delle frequenza e determinare l'indice di eterogeneità di Gini.
+
+```{r}
+gini.index <- function(x){
+  ni = table(x)
+  fi = ni/length(x)
+  fi2 = fi^2
+  J = length(table(x))
+  gini = 1 - sum(fi2)
+  gini.normalizzato = gini/((J-1)/J)
+  return(gini.normalizzato)
+}
+
+step_sales=(max(sales)-min(sales))/rice_bins(sales)
+sales_cl <- cut(sales, seq(min(sales)-1, max(sales)+step_sales, step_sales))
+n = length(sales_cl)
+
+ni = table(sales_cl)
+fi = table(sales_cl)/n
+print(fi)
+Ni = cumsum(ni)
+Fi = Ni/n
+
+dist_freq_sales <- as.data.frame(
+  cbind(sales_cl, ni, fi, Ni, Fi)
+)
+
+ggplot(dist_freq_sales, aes(x = sales_cl, y = fi))+
+  geom_bar(stat = "identity",
+           col = "black",
+           fill = "lightblue")+
+  labs(title = "Dist. delle classi di vendita",
+       x = "sales",
+       y = "freq. relativa")+
+  scale_y_continuous(breaks = seq(0,1,0.1)) +
+  theme_classic()
+
+gini.index(sales_cl)
+```
+
