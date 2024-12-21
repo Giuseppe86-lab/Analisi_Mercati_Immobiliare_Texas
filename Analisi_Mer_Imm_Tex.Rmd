@@ -399,5 +399,116 @@ ggplot() +
          y = "Mean Price") +
     theme_minimal()+
     theme(legend.position = "bottom")
+
+ggplot() +
+    geom_boxplot(aes_string(y = real_estate_df$eff_ads, color = city),
+                   fill = "lightblue") +
+    labs(title = paste("BP per Eff Ads e città"),
+         y = "Eff Ads") +
+    theme_minimal()+
+    theme(legend.position = "bottom")
+```
+
+
+Riproduciamo i boxplot del punto 3, aggiungendo la dipendenza dalla città:
+
+```{r}
+columns <- c("sales", "volume", "median_price", "listings", "months_inventory")
+
+for (col in columns) {
+  
+  data <- real_estate_df[[col]]
+  
+  plot <- ggplot(real_estate_df) +
+    geom_boxplot(aes_string(y = col, color = city),
+                   fill = "lightblue") +
+    labs(title = paste("BP per città e ", col),
+         y = col) +
+    theme_minimal()+
+    theme(legend.position = "right")
+  
+  print(plot)
+
+}
+
+```
+
+
+Per osservare se c'è una dipendenza dall'anno o dal mese oltre che dalla città, rappresentiamo le sette variabili (sales, volume, median_price, listings, months_inventory, mean_price e eff_ads) in funzione del tempo:
+
+
+```{r}
+# Converti la variabile year_month in un formato più leggibile
+real_estate_df$year_month <- as.factor(real_estate_df$year_month)
+real_estate_df$year_month <- gsub("_", "-", real_estate_df$year_month)  # Cambia '_' in '-'
+
+# Aggiungi una colonna che converte il formato in Date per gestirlo meglio
+real_estate_df$year_month_date <- as.Date(paste0(real_estate_df$year_month, "-01"), format="%Y-%m-%d")
+# Ora possiamo usare ggplot2
+# Colonne su cui fare i grafici
+columns <- c("sales", "median_price", "listings", "eff_ads")
+
+# Ciclo per creare un grafico per ogni colonna
+for (col in columns) {
+  # Crea il grafico
+  p <- ggplot(real_estate_df, aes(x = year_month_date, y = !!sym(col), color = city, group = city)) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 2) +
+    xlab("Mese") +
+    ylab(col) +
+    ggtitle(sprintf("Andamento di %s nel tempo e per Città", col)) +
+    scale_x_date(
+      breaks = seq(min(real_estate_df$year_month_date), 
+                   max(real_estate_df$year_month_date), 
+                   by = "6 months"),  # Intervallo ogni 6 mesi
+      labels = scales::date_format("%b %Y")  # Formato "Gennaio 2022"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1)  # Ruota le etichette per maggiore leggibilità
+    )
+  
+  # Stampa il grafico
+  print(p)
+}
+
+```
+
+
+Dal grafico della variabile sales si può osservare come le vendita abbiamo una certà periodicità infatti raggiungono il picco nel periodo estivo e il minimo durante l'inverno, per osservare meglio questo fenomeno rappresentiamolo attraverso un grafico a barre.
+
+```{r}
+# Crea un vettore con i nomi dei mesi
+month_names <- c("Jannuary", "Febbrary", "March", "April", "May", "June", 
+                 "July", "August", "September", "October", "November", "Dicember")
+
+# Converte il numero del mese in nome del mese
+real_estate_df$month_name <- factor(real_estate_df$month, levels = 1:12, labels = month_names)
+
+
+
+ggplot(data = real_estate_df) +
+  geom_bar(aes(x = month_name, y = sales, fill = city),
+           position = "stack",  # Usato per le barre sovrapposte
+           stat = "identity") +
+  labs(title = "Distribuzione delle vendite nei mesi",
+       x = "Mese",
+       y = "Vendite totali") +
+  scale_y_continuous(labels = scales::comma) +  # Formatta le etichette sull'asse y
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+
+ggplot(data = real_estate_df) +
+  geom_bar(aes(x = month_name, y = sales, fill = city),
+           position = "fill",  # Usa le barre normalizzate
+           stat = "identity") +
+  labs(title = "Distribuzione relativa delle vendite nei mesi",
+       x = "Mese",
+       y = "Frequenze relative") +
+  scale_y_continuous(labels = scales::percent) +  # Mostra le frequenze come percentuali
+  theme_classic() +
+  theme(legend.position = "bottom")
+
 ```
 
