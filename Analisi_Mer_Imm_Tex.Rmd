@@ -222,24 +222,182 @@ n = length(sales_cl)
 
 ni = table(sales_cl)
 fi = table(sales_cl)/n
-print(fi)
 Ni = cumsum(ni)
 Fi = Ni/n
 
 dist_freq_sales <- as.data.frame(
-  cbind(sales_cl, ni, fi, Ni, Fi)
+  cbind(ni, fi, Ni, Fi)
 )
 
-ggplot(dist_freq_sales, aes(x = sales_cl, y = fi))+
-  geom_bar(stat = "identity",
-           col = "black",
-           fill = "lightblue")+
-  labs(title = "Dist. delle classi di vendita",
-       x = "sales",
-       y = "freq. relativa")+
-  scale_y_continuous(breaks = seq(0,1,0.1)) +
-  theme_classic()
+dist_freq_sales$Intervalli <- rownames(dist_freq_sales)
+dist_freq_sales$Intervalli <- factor(
+  dist_freq_sales$Intervalli,  # Intervalli già presenti come stringhe
+  levels = dist_freq_sales$Intervalli  # Ordine delle righe di dist_freq_sales
+)
+print(dist_freq_sales)
 
-gini.index(sales_cl)
+ggplot(dist_freq_sales, aes(x = Intervalli, y = fi)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  xlab("Intervalli di Vendite") +
+  ylab("Frequenza Relativa") +
+  ggtitle("Distribuzione delle Vendite") +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+round(gini.index(dist_freq_sales$fi),4)
+```
+
+
+Studiando il barplot della distribuzione di frequenze relative della variabile sales, osserviamo che 5 delle 13 classi in cui abbiamo suddivido la variabile usando il criterio di Rice, presentano una frequenza tra il 10% e il 20%. Il campione quindi si presenta molto etereogeneo, come confermato anche dall'indice di eterogeneità di Gini che presenta un valore pari allo 0.9941.
+
+# 5. Calcolo della probabilità
+
+Vogliamo determinare alcune probabilità: la probabilità di avere un dato dalla città di "Beaumont", la probabilità di avere un dato estratto dal mese di Luglio e la probabilità di estrarre un dato di dicembre 2012.
+
+```{r}
+# Le tre probabilità che dobbiamo determinare possiamo tutte farle come casi favorevoli diviso casi possibile, cioè applicando la definisione di probabilità.
+
+# Probabilità Beaumont
+city_counts <- table(city)
+p_Beaumont <- city_counts["Beaumont"]/length(city)
+print(p_Beaumont)
+
+# Probabilità Luglio
+month_counts <- table(month)
+p_July <- round(month_counts["7"]/length(month),3)
+print(p_July)
+
+# Probabilità Dicembre 2012
+year_month_counts <-table(real_estate_df$year_month)
+p_dic_2012 <- round(year_month_counts["2012_12"]/length(real_estate_df$year_month),3)
+print(p_dic_2012) 
+```
+
+# 6. Creazione di nuove variabili
+
+Vogliamo aggiungere una colonna al nostro dataset con il prezzo medio degli immobili. Per questo scopo useremo le features **volumes** e **sales** il loro rapporto moltiplicato per 10^6 ci permetterà di determinare il valore medio della vendita di una casa in dollari. 
+
+```{r}
+real_estate_df$mean_price <- volume*10^6/sales
+
+bins <- rice_bins(real_estate_df$mean_price)
+binwidth <- diff(range(real_estate_df$mean_price, na.rm = TRUE)) / bins
+
+ggplot() +
+  geom_histogram(aes_string(x = real_estate_df$mean_price),
+                  binwidth = binwidth,
+                  col = "black",
+                  fill = "lightblue") +
+  labs(title = paste("HS per Mean Price"),
+        x = "Mean Price",
+        y = "Count") +
+  theme_minimal()
+
+summary(real_estate_df$mean_price)
+```
+
+Dall'istogramma possiamo osservare che c'è una zona centrale (intorno a 160000 \$) dove si concentrano la maggior parte delle case ma che esiste anche un picco secondario attorno a 120000 \$, nonostante questo la distribuzione sembra avere una discreta simmetria, il valore mediano e la media sono molto vicini, il coefficiente di asimmetria in valore assoluto è minore di 0.1.
+
+```{r}
+round(skewness(real_estate_df$mean_price),3)
+```
+
+
+Vogliamo creare una variabile che descriva l'efficacia degli annunci di vendita. Potremmo dire che un annuncio è efficace se la casa è venduta in un minore quantitativo di tempo, sostanzialmente una campagna publicitaria è efficacia quando a parità di numero di annunci c'è una frequenza più alta di case vendute al mese. Per i dati che abbiamo possiamo definire l'indice che misura l'**efficacia degli annunci di vendita** come il rapporto tra il numero di annunci attivati quel mese - **listing** - e quanti mesi sono stati necessari per venderli tutti - **months_inventory**, più alto sarà questo valore più la campagna publicitaria è stata efficace. Prima di definire la nuova variabile osserviamo se effettivamente **listings** e **month_inventory** mostrano una qualche dipendenza:
+
+
+```{r}
+ggplot(data = real_estate_df, aes(x = listings, y = months_inventory)) +
+  geom_point(color = "steelblue", size = 3, alpha = 0.7) +
+  xlab("Listings") +
+  ylab("Months Inventory") +
+  ggtitle("Scatterplot di Listings vs Months Inventory") +
+  theme_minimal()
+```
+
+
+Sono presenti tre serie di dati, segno di una dipendenza da qualche altro fattore probabilmente la città. Quindi riproduciamo il grafico precedente esplicitando la città di appartenza di ciascun dato (questo ci porta in modo naturale ad iniziare la nostra analisi condizionata).
+
+# 7. Analisi condizionata
+
+```{r}
+ggplot(data = real_estate_df, aes(x = listings, y = months_inventory, color = city)) +
+  geom_point(size = 3, alpha = 0.7) +
+  xlab("Listings") +
+  ylab("Months Inventory") +
+  ggtitle("Scatterplot di Listings vs Months Inventory (per città)") +
+  theme_minimal()+
+  theme(legend.position = "right")
+```
+
+
+Come sospettavano, esplicitando la città di appartenenza, le due grandezze mostrano una molto probabile dipendenza lineare, quindi procediamo a definire il loro rapporto come l'indice di efficienza della campagna pubblicitaria:
+
+```{r}
+#Definizione della nuova variabile
+real_estate_df$eff_ads <- listings/months_inventory
+```
+
+
+È interessante provare a vedere se c'è un correlazione tra il numero di annunci attivi e l'efficacia degli annunci stessi:
+
+
+```{r}
+ggplot(data = real_estate_df, aes(x = listings, y = eff_ads, color = city)) +
+  geom_point(size = 3, alpha = 0.7) +
+  xlab("Listings") +
+  ylab("Effective Ads") +
+  ggtitle("Scatterplot di Listings vs Effective Ads") +
+  theme_minimal()+
+  theme(legend.position = "right")
+```
+
+
+Il risultato è interessante, effettivamente c'è una certa correlazione tra il numero di annunci attivi e l'efficacia della campagna stessa. Proviamo a vedere invece la correlazione con i mesi necessari per vedere tutti gli annunci.
+
+```{r}
+ggplot(data = real_estate_df, aes(x = months_inventory, y = eff_ads, color = city)) +
+  geom_point( size = 3, alpha = 0.7) +
+  xlab("Months Inventory") +
+  ylab("Effective Ads") +
+  ggtitle("Scatterplot di Months Inventory vs Effective Ads") +
+  theme_minimal()+
+  theme(legend.position = "right")
+```
+
+All'interno della serie di dati relativi ad una stessa città si vede una correlazione inversa tra l'efficacia della campagna è i mesi necessari per vendere tutti gli annunci.
+
+I due scatterplot ci testimoniano che la variabile che abbiamo definito riesce a descrivere l'efficacia di una campagna pubblicitaria.
+
+
+Creiamo un summary di media e deviazione standard delle nostre nuove variabili in funzione della città.
+
+
+```{r}
+library(dplyr)
+real_estate_df %>%
+  group_by(city) %>%
+  summarise(media_price = mean(mean_price),
+            dev.st_price = sd(mean_price),
+            media_eff_ads = mean(eff_ads),
+            dev.st_eff_ads = sd(eff_ads))
+
+```
+
+
+Il summary prodotto mostra la differenza tra i prezzi delle case nelle quattro città e come anche l'efficacia della campagna pubblicitaria ha una certa dipendenza dalla città stessa.
+
+
+Per chiarezza possiamo mostrare questo medesimo risultato attraverso dei boxplot:
+
+```{r}
+ggplot() +
+    geom_boxplot(aes_string(y = real_estate_df$mean_price, color = city),
+                   fill = "lightblue") +
+    labs(title = paste("BP per Mean Price e città"),
+         y = "Mean Price") +
+    theme_minimal()+
+    theme(legend.position = "bottom")
 ```
 
