@@ -6,55 +6,79 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = TRUE)
 ```
-# 0. Load dataset
+
+
+# 0. Caricamento dataset e libreria
+
 
 ```{r}
+library(lubridate)
+library(moments)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
 real_estate_df <- read.csv("realestate_texas.csv", stringsAsFactors = TRUE)
 print(head(real_estate_df,5))
 print(dim(real_estate_df))
-attach(real_estate_df)
 ```
 
-The dataset has 8 features:
 
-1. city (qualitativa)
-2. year (qualitativa su scala ordinale)
-3. month (qualitativa su scala ordinale)
-4. sales (quantitativa discreta)- number of saled house per that month
-5. volume (quantitativa)- total revenue per that month in million of dollars
-6. median_price (quantitativa)- median price in dollars
-7. listings (quantitativa discreta)- total number of active listings
-8. months_inventory (quantitativa continua)- amount of time required to sell all current listings
+Il dataset ha 8 grandezze:
 
-# 1. Features Analysis
+1. **city** (qualitativa nominale)
+2. **year** (qualitativa su scala ordinale)
+3. **month** (qualitativa su scala ordinale)
+4. **sales** (quantitativa discreta)- numero di case vendute in quel mese
+5. **volume** (quantitativa continua)- ricavi totali in milioni di dollari in quel mese
+6. **median_price** (quantitativa continua)- prezzo mediano in dollari delle case
+7. **listings** (quantitativa discreta)- numero totale di annunci attivi
+8. **months_inventory** (quantitativa continua)- mesi necessari per vendere tutte le inserzioni attuali
+
+
+# 1. Analisi delle variabili
+
+
 ```{r}
-levels(city)
-unique(year)
-unique(month)
+levels(real_estate_df$city)
+unique(real_estate_df$year)
+unique(real_estate_df$month)
 ```
-We have to analyze the result of four cities for four years, it is better to had a column that can combine year and month.
+
+
+Dovendo analizzare il risultato di quattro città per quattro anni, è meglio avere una colonna che possa combinare anno e mese in una formato tipo data.
+
+
 ```{r}
-real_estate_df$year_month <-paste(year, month, sep="_")
+real_estate_df$date <- paste(real_estate_df$year, real_estate_df$month, "01", sep = "-") %>% ymd() 
+
+real_estate_df$date <- format(real_estate_df$date, "%b-%Y")
 ```
+
+
+Molteplici sono le analisi che posso essere fatte con queste variabili, in particolare per quelle quantitative (**sales, volume, median_price, listings e months_inventory**) studieremo prima le loro distribuzioni attraverso istogrammi e boxplot, determineremo per ciascuna di queste variabili anche  gli indici di posizione, variabilità e forma, successivamente studieremo come cambiano in funzione della città e se presentano dei trend nel tempo costruendo alcuni scatterplots. 
+
+Per le variabili **city**, **month** e **year** costruiremo delle distribuzioni di frequenze per vedere se tutte le modalità delle variabili sono equidistribuite nel dataset.
+
 
 # 2. Indici di posizione, variabilità e forma 
 
 ```{r}
-table(city)
-table(year)
-table(year, city)
-table(month)
+table(real_estate_df$city)
+table(real_estate_df$year)
+table(real_estate_df$year, real_estate_df$city)
+table(real_estate_df$month)
 ```
 
-Le distribuzioni di frequenze assolute ci mostrano che i dati sono perfettamente bilanciati per anno e per città, quindi avremo un totale 60 entries per ogni città, una per ogni mese dei 5 anni di analisi.
+
+Le distribuzioni di frequenze assolute ci mostrano che i dati sono equidistribuite per anno e per città, quindi avremo un totale 60 entries per ogni città, una per ogni mese dei 5 anni di analisi.
 
 
-Calcoliamo gli indici di posizione, di variabilità e di forma per le variabili: sales, volume, median_price, listing e months_inventory
+Calcoliamo gli indici di posizione, di variabilità e di forma per le variabili: **sales, volume, median_price, listing e months_inventory**
+
 
 ```{r}
-library(moments)
 # Definizione funzione per il calcolo del coefficiente di variazione
 CV <- function(x){
   return (sd(x)/mean(x))*100
@@ -69,64 +93,69 @@ results <- list()
 # Ciclo sulle colonne
 for (col in columns) {
   
-  data <- real_estate_df[[col]]  # Estrai la colonna
+  data <- real_estate_df[[col]] 
     
   # Calcola le statistiche base
-  stats <- round(summary(data),2)  # Ottieni Min, Q1, Mediana, Media, Q3, Max
+  stats <- round(summary(data),2)  
     
   # Calcola ulteriori statistiche
-  iqr <- round(IQR(data),2)  # Intervallo interquartile
-  varianza <- round(var(data),2)  # Varianza
-  sd <- round(sd(data),2)  # Deviazione standard
+  iqr <- round(IQR(data),2)  
+  varianza <- round(var(data),2) 
+  sd <- round(sd(data),2)  
   cv <- round(CV(data),2)
-  skew <- round(skewness(data),2)  # Skewness
-  kurt <- round(kurtosis(data),2)-3  # Kurtosis
+  skew <- round(skewness(data),2)  
+  kurt <- round(kurtosis(data),2)-3  
     
     # Combina tutte le statistiche in una riga
   stats_row <- c(stats, IQR = iqr, Varianza = varianza, SD = sd, CV = cv, Skewness = skew, Kurtosis = kurt)
     
-    # Trasponi per creare una riga per colonna e aggiungi alla lista
+   
   results[[col]] <- as.data.frame(t(stats_row))
 
 }
 
 # Combina i risultati in un unico data.frame
 results_table <- do.call(rbind, results)
-results_table <- cbind(Grandezza = rownames(results_table), results_table)  # Aggiungi i nomi delle colonne
-rownames(results_table) <- NULL  # Rimuovi i vecchi indici
+results_table <- cbind(Variable = rownames(results_table), results_table)  
+rownames(results_table) <- NULL  
 
 # Aggiorna i nomi delle colonne per includere le nuove statistiche
-colnames(results_table) <- c("Grandezza", "Min", "1st Qu.", "Median", "Mean", "3rd Qu.", "Max", 
-                             "IQR", "Varianza", "SD", "CV", "Skewness", "Kurtosis")
+colnames(results_table) <- c("Variable", "Min", "1st Qu.", "Median", "Mean", "3rd Qu.", "Max", 
+                             "IQR", "Variance", "SD", "CV", "Skewness", "Kurtosis")
 
-# Visualizza il risultato
 print(results_table)
 
 
 ```
 
+
+Le 5 grandezze che abbiamo considerato hanno domini molto diversi questo a causa delle diverse unità di misura ma anche per l'informazione che rappresentano. Ci sono delle tendenze, infatti possiamo notare che tutte, tranne **median_price**, presentano un'assimetria positiva.
+
+
 # 3. Identificazione delle variabili con maggiore variabilità e asimmetria
 
 
-Le grandezze sales. volume, listings e months_inventory mostrano tutte una asimmetria positiva in quanto la media è maggiore della mediana, mentre median_price mostra una asimmetria negativa. Le 5 quantità hanno domini di variabilità molto diversi.
+Le grandezze **sales, volume, listings e months_inventory** mostrano tutte unìasimmetria positiva in quanto la media è maggiore della mediana, mentre **median_price** mostra una asimmetria negativa. 
 
 
 Leggendo la colonna del coefficiente di variabilità possiamo notare che **volume** è la variabile con la più alta variabilità ed è anche quella che presente un coefficiente di asimmetria più alto, è anche l'unica con una Curtosi positiva (0.18) valore che ci dice come la variabile presenti la tendenza ad avere una distribuzione più stretta rispetto a quella della distribuzione normale. Validiamo queste osservazioni anche attraverso la rappresentazione grafica con istogrammi e boxplot.
 
 
 Costruiamo gli istogrammi di queste sei grandezze:
+
+
 ```{r}
 # Definizione per il calcolo del numero di bin secondo il criterio di Rice
 rice_bins <- function(data) {
   n <- length(data) # Numero di osservazioni
   return(2 * n^(1/3))
 }
-
 ```
 
 ```{r}
-library(ggplot2)
-library(patchwork) # Per disporre i grafici in una griglia
+#Usiamo attach per accedere più facilmente alla variabili, dovendo costruire molteplici grafici
+
+attach(real_estate_df)
 
 # Lista per salvare i grafici
 plots <- list()
@@ -155,17 +184,17 @@ for (col in columns) {
   plots[[col]] <- plot
 }
 
-# Disposizione dei grafici in una griglia 3x2
+# Disposizione dei grafici in una griglia 2x3
 final_plot <- (plots[[1]] | plots[[2]] | plots[[3]]) /
               (plots[[4]] | plots[[5]])
 
 # Mostra i grafici
 print(final_plot)
-
-  
 ```
 
-Costruiamo i boxplot di queste sei grandezze:
+
+Costruiamo i boxplot di queste cinque grandezze:
+
 
 ```{r}
 # Lista per salvare i grafici
@@ -189,23 +218,26 @@ for (col in columns) {
   plots[[col]] <- plot
 }
 
-# Disposizione dei grafici in una griglia 3x2
+# Disposizione dei grafici in una griglia 2x3
 final_plot <- (plots[[1]] | plots[[2]] | plots[[3]]) /
               (plots[[4]] | plots[[5]])
 
 # Mostra i grafici
 print(final_plot)
-
 ```
 
+
 Osservando i boxplot vediamo che **volume** è l'unica grandezza che presenta degli outliers, la presenza dei quali potrebbe giustificare l'asimetria registrata dal relativo coefficiente e la sua maggiore variabilità.
+
 
 #4. Creazione di classi per una variabile quantitativa
 
 
-Selezioniamo la variabile sales per costruire una distribuzione delle frequenza e determinare l'indice di eterogeneità di Gini.
+Selezioniamo la variabile sales per costruire una distribuzione delle frequenze e determinare l'indice di eterogeneità di Gini.
+
 
 ```{r}
+#Definiamo la funzione per calcolare l'indice di eterogeneità di Gini
 gini.index <- function(x){
   ni = table(x)
   fi = ni/length(x)
@@ -234,10 +266,9 @@ dist_freq_sales$Intervalli <- factor(
   dist_freq_sales$Intervalli,  # Intervalli già presenti come stringhe
   levels = dist_freq_sales$Intervalli  # Ordine delle righe di dist_freq_sales
 )
-print(dist_freq_sales)
 
 ggplot(dist_freq_sales, aes(x = Intervalli, y = fi)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_col(fill = "steelblue") +
   xlab("Intervalli di Vendite") +
   ylab("Frequenza Relativa") +
   ggtitle("Distribuzione delle Vendite") +
@@ -249,11 +280,13 @@ round(gini.index(dist_freq_sales$fi),4)
 ```
 
 
-Studiando il barplot della distribuzione di frequenze relative della variabile sales, osserviamo che 5 delle 13 classi in cui abbiamo suddivido la variabile usando il criterio di Rice, presentano una frequenza tra il 10% e il 20%. Il campione quindi si presenta molto etereogeneo, come confermato anche dall'indice di eterogeneità di Gini che presenta un valore pari allo 0.9941.
+Studiando il Colplot della distribuzione di frequenze relative della variabile **sales**, osserviamo che 5 delle 13 classi in cui abbiamo suddiviso la variabile, usando il criterio di Rice, presentano una frequenza tra il 10% e il 20%. Il campione quindi si presenta molto etereogeneo, come confermato anche dall'indice di eterogeneità di Gini che presenta un valore pari allo 0.9941.
+
 
 # 5. Calcolo della probabilità
 
-Vogliamo determinare alcune probabilità: la probabilità di avere un dato dalla città di "Beaumont", la probabilità di avere un dato estratto dal mese di Luglio e la probabilità di estrarre un dato di dicembre 2012.
+
+Vogliamo determinare alcune probabilità: la probabilità di avere un dato dalla città di "Beaumont", la probabilità di avere un dato estratto dal mese di Luglio e la probabilità di estrarre un dato di Dicembre 2012.
 
 ```{r}
 # Le tre probabilità che dobbiamo determinare possiamo tutte farle come casi favorevoli diviso casi possibile, cioè applicando la definisione di probabilità.
@@ -269,14 +302,18 @@ p_July <- round(month_counts["7"]/length(month),3)
 print(p_July)
 
 # Probabilità Dicembre 2012
-year_month_counts <-table(real_estate_df$year_month)
-p_dic_2012 <- round(year_month_counts["2012_12"]/length(real_estate_df$year_month),3)
+month_year_counts <-table(date)
+p_dic_2012 <- round(month_year_counts["Dec-2012"]/length(date),3)
 print(p_dic_2012) 
 ```
 
+
 # 6. Creazione di nuove variabili
 
+
 Vogliamo aggiungere una colonna al nostro dataset con il prezzo medio degli immobili. Per questo scopo useremo le features **volumes** e **sales** il loro rapporto moltiplicato per 10^6 ci permetterà di determinare il valore medio della vendita di una casa in dollari. 
+
+Dopo aver definito la nuova variabile, mostreremo il suo istogramma.
 
 ```{r}
 real_estate_df$mean_price <- volume*10^6/sales
@@ -285,7 +322,7 @@ bins <- rice_bins(real_estate_df$mean_price)
 binwidth <- diff(range(real_estate_df$mean_price, na.rm = TRUE)) / bins
 
 ggplot() +
-  geom_histogram(aes_string(x = real_estate_df$mean_price),
+  geom_histogram(aes(x = real_estate_df$mean_price),
                   binwidth = binwidth,
                   col = "black",
                   fill = "lightblue") +
@@ -304,7 +341,7 @@ round(skewness(real_estate_df$mean_price),3)
 ```
 
 
-Vogliamo creare una variabile che descriva l'efficacia degli annunci di vendita. Potremmo dire che un annuncio è efficace se la casa è venduta in un minore quantitativo di tempo, sostanzialmente una campagna publicitaria è efficacia quando a parità di numero di annunci c'è una frequenza più alta di case vendute al mese. Per i dati che abbiamo possiamo definire l'indice che misura l'**efficacia degli annunci di vendita** come il rapporto tra il numero di annunci attivati quel mese - **listing** - e quanti mesi sono stati necessari per venderli tutti - **months_inventory**, più alto sarà questo valore più la campagna publicitaria è stata efficace. Prima di definire la nuova variabile osserviamo se effettivamente **listings** e **month_inventory** mostrano una qualche dipendenza:
+Vogliamo creare una variabile che descriva l'efficacia degli annunci di vendita. Potremmo dire che un annuncio è efficace se la casa è venduta in un minore quantitativo di tempo. sostanzialmente una campagna publicitaria è efficacia quando a parità di numero di annunci c'è una frequenza più alta di case vendute al mese. Per i dati che abbiamo possiamo definire l'indice che misura l'**efficacia degli annunci di vendita** come il rapporto tra il numero di annunci attivati quel mese - **listing** - e quanti mesi sono stati necessari per venderli tutti - **months_inventory**, più alto sarà questo valore più la campagna publicitaria è stata efficace. Prima di definire la nuova variabile osserviamo se effettivamente **listings** e **month_inventory** mostrano una qualche dipendenza:
 
 
 ```{r}
@@ -319,7 +356,9 @@ ggplot(data = real_estate_df, aes(x = listings, y = months_inventory)) +
 
 Sono presenti tre serie di dati, segno di una dipendenza da qualche altro fattore probabilmente la città. Quindi riproduciamo il grafico precedente esplicitando la città di appartenza di ciascun dato (questo ci porta in modo naturale ad iniziare la nostra analisi condizionata).
 
+
 # 7. Analisi condizionata
+
 
 ```{r}
 ggplot(data = real_estate_df, aes(x = listings, y = months_inventory, color = city)) +
@@ -333,6 +372,7 @@ ggplot(data = real_estate_df, aes(x = listings, y = months_inventory, color = ci
 
 
 Come sospettavano, esplicitando la città di appartenenza, le due grandezze mostrano una molto probabile dipendenza lineare, quindi procediamo a definire il loro rapporto come l'indice di efficienza della campagna pubblicitaria:
+
 
 ```{r}
 #Definizione della nuova variabile
@@ -354,7 +394,8 @@ ggplot(data = real_estate_df, aes(x = listings, y = eff_ads, color = city)) +
 ```
 
 
-Il risultato è interessante, effettivamente c'è una certa correlazione tra il numero di annunci attivi e l'efficacia della campagna stessa. Proviamo a vedere invece la correlazione con i mesi necessari per vedere tutti gli annunci.
+Il risultato è interessante, effettivamente c'è una certa correlazione tra il numero di annunci attivi e l'efficacia della campagna stessa. Proviamo a vedere invece la correlazione con i mesi necessari per vendere tutti gli annunci.
+
 
 ```{r}
 ggplot(data = real_estate_df, aes(x = months_inventory, y = eff_ads, color = city)) +
@@ -366,7 +407,9 @@ ggplot(data = real_estate_df, aes(x = months_inventory, y = eff_ads, color = cit
   theme(legend.position = "right")
 ```
 
+
 All'interno della serie di dati relativi ad una stessa città si vede una correlazione inversa tra l'efficacia della campagna è i mesi necessari per vendere tutti gli annunci.
+
 
 I due scatterplot ci testimoniano che la variabile che abbiamo definito riesce a descrivere l'efficacia di una campagna pubblicitaria.
 
@@ -375,7 +418,6 @@ Creiamo un summary di media e deviazione standard delle nostre nuove variabili i
 
 
 ```{r}
-library(dplyr)
 real_estate_df %>%
   group_by(city) %>%
   summarise(media_price = mean(mean_price),
@@ -390,6 +432,7 @@ Il summary prodotto mostra la differenza tra i prezzi delle case nelle quattro c
 
 
 Per chiarezza possiamo mostrare questo medesimo risultato attraverso dei boxplot:
+
 
 ```{r}
 ggplot() +
@@ -412,6 +455,7 @@ ggplot() +
 
 Riproduciamo i boxplot del punto 3, aggiungendo la dipendenza dalla città:
 
+
 ```{r}
 columns <- c("sales", "volume", "median_price", "listings", "months_inventory")
 
@@ -428,81 +472,97 @@ for (col in columns) {
     theme(legend.position = "right")
   
   print(plot)
-
 }
 
 ```
 
 
-Per osservare se c'è una dipendenza dall'anno o dal mese oltre che dalla città, rappresentiamo le sette variabili (sales, volume, median_price, listings, months_inventory, mean_price e eff_ads) in funzione del tempo:
+Riportiamo anche il boxplot del totale vendite (**volume**) in funzione dell'anno in modo da vedere come si è comportata l'azienda nel tempo:
 
 
 ```{r}
-# Converti la variabile year_month in un formato più leggibile
-real_estate_df$year_month <- as.factor(real_estate_df$year_month)
-real_estate_df$year_month <- gsub("_", "-", real_estate_df$year_month)  # Cambia '_' in '-'
+ggplot() +
+    geom_boxplot(aes(x = as.factor(year), y = volume, color = as.factor(year)),
+                 fill = "lightblue") +
+    labs(title = "BP di volume per anno",
+         x = "Anno",
+         y = "Volume",
+         color = NULL) +
+    theme_minimal()+
+    theme(legend.position = "bottom")
+```
 
-# Aggiungi una colonna che converte il formato in Date per gestirlo meglio
-real_estate_df$year_month_date <- as.Date(paste0(real_estate_df$year_month, "-01"), format="%Y-%m-%d")
-# Ora possiamo usare ggplot2
-# Colonne su cui fare i grafici
+
+Da questo boxplot possiamo vedere come la società sia cresciuta negli anni aumentano la mediana di **volume** ma ha aumentato anche la variabilità dei suoi ricavi nei diversi mesi, infatti il "box" si è allargato costantemente.
+
+
+Per osservare se c'è una dipendenza dall'anno o dal mese oltre che dalla città, rappresentiamo alcune variabili in funzione del tempo:
+
+
+```{r}
+# Converte la colonna 'date' in formato Date
+real_estate_df$date2 <- as.Date(paste("01", real_estate_df$date, sep = "-"), format = "%d-%b-%Y")
+
+head(real_estate_df$date2)
+
 columns <- c("sales", "median_price", "listings", "eff_ads")
 
-# Ciclo per creare un grafico per ogni colonna
 for (col in columns) {
   # Crea il grafico
-  p <- ggplot(real_estate_df, aes(x = year_month_date, y = !!sym(col), color = city, group = city)) +
+  p <- ggplot(real_estate_df, aes(x = date2, y = !!sym(col), color = city, group = city)) +
     geom_line(linewidth = 1) +
     geom_point(size = 2) +
     xlab("Mese") +
     ylab(col) +
     ggtitle(sprintf("Andamento di %s nel tempo e per Città", col)) +
     scale_x_date(
-      breaks = seq(min(real_estate_df$year_month_date), 
-                   max(real_estate_df$year_month_date), 
-                   by = "6 months"),  # Intervallo ogni 6 mesi
+      breaks = seq(min(real_estate_df$date2), 
+                   max(real_estate_df$date2), 
+                   by = "4 months"),  # Intervallo ogni 4 mesi
       labels = scales::date_format("%b %Y")  # Formato "Gennaio 2022"
     ) +
     theme_minimal() +
     theme(
-      axis.text.x = element_text(angle = 45, hjust = 1)  # Ruota le etichette per maggiore leggibilità
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "bottom"
     )
-  
+
   # Stampa il grafico
   print(p)
 }
-
 ```
 
 
-Dal grafico della variabile sales si può osservare come le vendita abbiamo una certà periodicità infatti raggiungono il picco nel periodo estivo e il minimo durante l'inverno, per osservare meglio questo fenomeno rappresentiamolo attraverso un grafico a barre.
+Dal grafico della variabile **sales** si può osservare come il numero di vendite abbia una certà periodicità infatti raggiungono il picco nel periodo estivo e il minimo durante l'inverno, per osservare meglio questo fenomeno rappresentiamolo attraverso un grafico a barre. Questa periodicità si riflette anche il **listing**. 
+
+La variabile **median_price** mostra per Beaumomnt e Wichita Falls una certa caoticità mentre per Tyler e Bryan-College station è leggermente crescente. 
+
+Mentre la variabile **eff_ads** per tutta le città tranne Wichita Falls mostra una crescita costante segno che le campagne pubblicitarie hanno avuto un maggior impatto.
+
+
 
 ```{r}
 # Crea un vettore con i nomi dei mesi
-month_names <- c("Jannuary", "Febbrary", "March", "April", "May", "June", 
-                 "July", "August", "September", "October", "November", "Dicember")
+month_names <- c("Jann", "Feb", "Mar", "Apr", "May", "Jun", 
+                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dic")
 
 # Converte il numero del mese in nome del mese
 real_estate_df$month_name <- factor(real_estate_df$month, levels = 1:12, labels = month_names)
 
-
-
 ggplot(data = real_estate_df) +
-  geom_bar(aes(x = month_name, y = sales, fill = city),
-           position = "stack",  # Usato per le barre sovrapposte
-           stat = "identity") +
+  geom_col(aes(x = month_name, y = volume, fill = city),
+           position = "stack") +
   labs(title = "Distribuzione delle vendite nei mesi",
        x = "Mese",
        y = "Vendite totali") +
-  scale_y_continuous(labels = scales::comma) +  # Formatta le etichette sull'asse y
+  scale_y_continuous(labels = scales::comma) + 
   theme_classic() +
   theme(legend.position = "bottom")
 
 
 ggplot(data = real_estate_df) +
-  geom_bar(aes(x = month_name, y = sales, fill = city),
-           position = "fill",  # Usa le barre normalizzate
-           stat = "identity") +
+  geom_col(aes(x = month_name, y = volume, fill = city),
+           position = "fill") +
   labs(title = "Distribuzione relativa delle vendite nei mesi",
        x = "Mese",
        y = "Frequenze relative") +
@@ -512,3 +572,16 @@ ggplot(data = real_estate_df) +
 
 ```
 
+
+Questi ultimi due grafici mettono in evidenza in modo chiaro come il mercato immobiliare sia costate durante l'anno nelle città di Wichita Falls e Beaumont mentre per Bryan-College Station, soprattutto, ma in parte anche per la città di Tyler c'è una dipendenza dalla stagionalità.
+
+# 8. Conclusioni
+
+
+L'analisi svolta è stata molto ricca e molteplici sono le considerazioni che possono essere fatte:
+
+1. Il mercato di Wichita Falls è quello meno sviluppato sotto tutti gli indici, potrebbe essere una città in cui fare investimento cercando di aumentare il numero di case in vendita.
+
+2. La città di Bryan-College Station sembra strategica per il business essendo quella che mostra un valore mediano maggiore.
+
+3. Nelle città di Wichita Falls e Beaumont ha senso intensificare la pubblicità nel corso di tutto l'anno mentre per le altre due devono essere sfruttati soprattutto i mesi estivi piuttosto che quelli invernali che presentano una maggior difficoltà nel concludere accordi di vendita.
