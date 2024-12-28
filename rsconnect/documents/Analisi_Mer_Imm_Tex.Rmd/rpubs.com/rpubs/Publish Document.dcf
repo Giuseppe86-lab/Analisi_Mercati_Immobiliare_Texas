@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/1259034/3e55ce265f9a45eeb914850fd1279f55
+bundleId: https://api.rpubs.com/api/v1/document/1259034/3e55ce265f9a45eeb914850fd1279f55
+url: http://rpubs.com/GiusSinatra/1259034
+version: 1

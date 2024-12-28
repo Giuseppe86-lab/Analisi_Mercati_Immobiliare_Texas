@@ -19,8 +19,10 @@ library(moments)
 library(ggplot2)
 library(patchwork)
 library(dplyr)
+library(knitr)
 real_estate_df <- read.csv("realestate_texas.csv", stringsAsFactors = TRUE)
-print(head(real_estate_df,5))
+#print(head(real_estate_df,5))
+kable(head(real_estate_df,5))
 print(dim(real_estate_df))
 ```
 
@@ -65,10 +67,10 @@ Per le variabili **city**, **month** e **year** costruiremo delle distribuzioni 
 # 2. Indici di posizione, variabilità e forma 
 
 ```{r}
-table(real_estate_df$city)
-table(real_estate_df$year)
-table(real_estate_df$year, real_estate_df$city)
-table(real_estate_df$month)
+kable(table(real_estate_df$city))
+kable(table(real_estate_df$year))
+kable(table(real_estate_df$year, real_estate_df$city))
+kable(table(real_estate_df$month))
 ```
 
 
@@ -123,7 +125,7 @@ rownames(results_table) <- NULL
 colnames(results_table) <- c("Variable", "Min", "1st Qu.", "Median", "Mean", "3rd Qu.", "Max", 
                              "IQR", "Variance", "SD", "CV", "Skewness", "Kurtosis")
 
-print(results_table)
+kable(results_table)
 
 
 ```
@@ -212,7 +214,9 @@ for (col in columns) {
                    fill = "lightblue") +
     labs(title = paste("BP per", col),
          y = col) +
-    theme_minimal()
+    theme_minimal()+
+    theme(axis.text.x = element_blank(),  # Rimuove i numeri dall'asse X
+          axis.ticks.x = element_blank())
   
   # Aggiungi il grafico alla lista
   plots[[col]] <- plot
@@ -276,7 +280,7 @@ ggplot(dist_freq_sales, aes(x = Intervalli, y = fi)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-round(gini.index(dist_freq_sales$fi),4)
+round(gini.index(dist_freq_sales$fi),2)
 ```
 
 
@@ -298,12 +302,12 @@ print(p_Beaumont)
 
 # Probabilità Luglio
 month_counts <- table(month)
-p_July <- round(month_counts["7"]/length(month),3)
+p_July <- round(month_counts["7"]/length(month),2)
 print(p_July)
 
 # Probabilità Dicembre 2012
 month_year_counts <-table(date)
-p_dic_2012 <- round(month_year_counts["Dec-2012"]/length(date),3)
+p_dic_2012 <- round(month_year_counts["Dec-2012"]/length(date),2)
 print(p_dic_2012) 
 ```
 
@@ -337,7 +341,7 @@ summary(real_estate_df$mean_price)
 Dall'istogramma possiamo osservare che c'è una zona centrale (intorno a 160000 \$) dove si concentrano la maggior parte delle case ma che esiste anche un picco secondario attorno a 120000 \$, nonostante questo la distribuzione sembra avere una discreta simmetria, il valore mediano e la media sono molto vicini, il coefficiente di asimmetria in valore assoluto è minore di 0.1.
 
 ```{r}
-round(skewness(real_estate_df$mean_price),3)
+round(skewness(real_estate_df$mean_price),2)
 ```
 
 
@@ -418,12 +422,12 @@ Creiamo un summary di media e deviazione standard delle nostre nuove variabili i
 
 
 ```{r}
-real_estate_df %>%
+kable(real_estate_df %>%
   group_by(city) %>%
   summarise(media_price = mean(mean_price),
             dev.st_price = sd(mean_price),
             media_eff_ads = mean(eff_ads),
-            dev.st_eff_ads = sd(eff_ads))
+            dev.st_eff_ads = sd(eff_ads)))
 
 ```
 
@@ -439,21 +443,27 @@ ggplot() +
     geom_boxplot(aes_string(y = real_estate_df$mean_price, color = city),
                    fill = "lightblue") +
     labs(title = paste("BP per Mean Price e città"),
-         y = "Mean Price") +
+         y = "Mean Price",
+         color = "Città") +
     theme_minimal()+
-    theme(legend.position = "bottom")
+    theme(legend.position = "bottom")+
+    theme(axis.text.x = element_blank(),  # Rimuove i numeri dall'asse X
+          axis.ticks.x = element_blank())
 
 ggplot() +
     geom_boxplot(aes_string(y = real_estate_df$eff_ads, color = city),
                    fill = "lightblue") +
     labs(title = paste("BP per Eff Ads e città"),
-         y = "Eff Ads") +
+         y = "Eff Ads",
+         color="Città") +
     theme_minimal()+
-    theme(legend.position = "bottom")
+    theme(legend.position = "bottom")+
+    theme(axis.text.x = element_blank(),  # Rimuove i numeri dall'asse X
+          axis.ticks.x = element_blank())
 ```
 
 
-Riproduciamo i boxplot del punto 3, aggiungendo la dipendenza dalla città:
+Riproduciamo i boxplot del punto 3, aggiungendo la dipendenza dalla città e dall'anno:
 
 
 ```{r}
@@ -464,12 +474,14 @@ for (col in columns) {
   data <- real_estate_df[[col]]
   
   plot <- ggplot(real_estate_df) +
-    geom_boxplot(aes_string(y = col, color = city),
-                   fill = "lightblue") +
-    labs(title = paste("BP per città e ", col),
-         y = col) +
-    theme_minimal()+
-    theme(legend.position = "right")
+  geom_boxplot(aes_string(y = col, x = "city", fill = "factor(year)")) +
+  labs(title = paste("Boxplot per città, anno e", col),
+       y = col,
+       x = "Città",
+       fill = "Anno") +
+  theme_minimal() +
+  theme(legend.position = "right") +
+  scale_fill_brewer(palette = "Set3")
   
   print(plot)
 }
@@ -477,23 +489,7 @@ for (col in columns) {
 ```
 
 
-Riportiamo anche il boxplot del totale vendite (**volume**) in funzione dell'anno in modo da vedere come si è comportata l'azienda nel tempo:
-
-
-```{r}
-ggplot() +
-    geom_boxplot(aes(x = as.factor(year), y = volume, color = as.factor(year)),
-                 fill = "lightblue") +
-    labs(title = "BP di volume per anno",
-         x = "Anno",
-         y = "Volume",
-         color = NULL) +
-    theme_minimal()+
-    theme(legend.position = "bottom")
-```
-
-
-Da questo boxplot possiamo vedere come la società sia cresciuta negli anni aumentano la mediana di **volume** ma ha aumentato anche la variabilità dei suoi ricavi nei diversi mesi, infatti il "box" si è allargato costantemente.
+Dal boxplot del **volume** possiamo vedere come la società sia cresciuta negli anni, infatti aumenta la mediana di **volume** ma ha aumentato anche la variabilità dei suoi ricavi nei diversi anni, infatti il "box" si è allargato costantemente.
 
 
 Per osservare se c'è una dipendenza dall'anno o dal mese oltre che dalla città, rappresentiamo alcune variabili in funzione del tempo:
@@ -502,8 +498,6 @@ Per osservare se c'è una dipendenza dall'anno o dal mese oltre che dalla città
 ```{r}
 # Converte la colonna 'date' in formato Date
 real_estate_df$date2 <- as.Date(paste("01", real_estate_df$date, sep = "-"), format = "%d-%b-%Y")
-
-head(real_estate_df$date2)
 
 columns <- c("sales", "median_price", "listings", "eff_ads")
 
